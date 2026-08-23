@@ -101,6 +101,19 @@ void loop() {
   }
 }
 
+const char* wifiStatusName(uint8_t status) {
+  switch (status) {
+    case WL_IDLE_STATUS:     return "WL_IDLE_STATUS";
+    case WL_SCAN_COMPLETED:  return "WL_SCAN_COMPLETED";
+    case WL_CONNECTED:       return "WL_CONNECTED";
+    case WL_CONNECT_FAILED:  return "WL_CONNECT_FAILED";
+    case WL_CONNECTION_LOST: return "WL_CONNECTION_LOST";
+    case WL_DISCONNECTED:    return "WL_DISCONNECTED";
+    case WL_NO_SHIELD:       return "WL_NO_SHIELD";
+    default:                 return "UNKNOWN";
+  }
+}
+
 void drawWiFiConnectScreen(const char* ssid, int dots) {
   int16_t screenW = gfx->width();
   int16_t screenH = gfx->height();
@@ -130,33 +143,63 @@ void drawWiFiConnectScreen(const char* ssid, int dots) {
 
 void setupWiFi() {
   WiFi.mode(WIFI_STA);
-  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
-  Serial.print("Connecting to WiFi: ");
+  Serial.print("[WiFi] MAC address: ");
+  Serial.println(WiFi.macAddress());
+  Serial.print("[WiFi] Configured SSID: ");
   Serial.println(WIFI_SSID);
+  Serial.print("[WiFi] SSID length: ");
+  Serial.println(strlen(WIFI_SSID));
+  Serial.print("[WiFi] Password length: ");
+  Serial.println(strlen(WIFI_PASSWORD));
+
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  Serial.println("[WiFi] Starting connection...");
 
   unsigned long startAttempt = millis();
   int dots = 0;
   while (WiFi.status() != WL_CONNECTED && millis() - startAttempt < 20000) {
     drawWiFiConnectScreen(WIFI_SSID, dots++);
+
+    uint8_t status = WiFi.status();
+    Serial.print("[WiFi] status: ");
+    Serial.print(wifiStatusName(status));
+    Serial.print(" (");
+    Serial.print(status);
+    Serial.println(")");
+
     delay(500);
-    Serial.print('.');
   }
-  Serial.println();
 
   gfx->fillScreen(BG_COLOR);
 
   if (WiFi.status() == WL_CONNECTED) {
-    Serial.println("WiFi connected");
-    Serial.print("IP address: ");
+    Serial.println("[WiFi] Connected successfully");
+    Serial.print("[WiFi] IP address: ");
     Serial.println(WiFi.localIP());
+    Serial.print("[WiFi] Subnet mask: ");
+    Serial.println(WiFi.subnetMask());
+    Serial.print("[WiFi] Gateway: ");
+    Serial.println(WiFi.gatewayIP());
+    Serial.print("[WiFi] DNS: ");
+    Serial.println(WiFi.dnsIP());
+    Serial.print("[WiFi] RSSI: ");
+    Serial.print(WiFi.RSSI());
+    Serial.println(" dBm");
+    Serial.print("[WiFi] MAC: ");
+    Serial.println(WiFi.macAddress());
 
     gfx->setTextSize(2);
     gfx->setTextColor(WIFI_CONNECTED_COLOR);
     gfx->setCursor(8, gfx->height() / 2 - 12);
     gfx->print("WiFi connected");
   } else {
-    Serial.println("WiFi connection failed");
+    uint8_t finalStatus = WiFi.status();
+    Serial.print("[WiFi] Connection failed, final status: ");
+    Serial.print(wifiStatusName(finalStatus));
+    Serial.print(" (");
+    Serial.print(finalStatus);
+    Serial.println(")");
 
     gfx->setTextSize(2);
     gfx->setTextColor(WIFI_DISCONNECTED_COLOR);
@@ -168,10 +211,18 @@ void setupWiFi() {
 }
 
 void maintainWiFi() {
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("WiFi disconnected; reconnecting...");
+  uint8_t status = WiFi.status();
+  if (status != WL_CONNECTED) {
+    Serial.print("[WiFi] Link lost, status: ");
+    Serial.print(wifiStatusName(status));
+    Serial.print(" (");
+    Serial.print(status);
+    Serial.println("); reconnecting...");
+
     WiFi.disconnect();
     WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+
+    Serial.println("[WiFi] Reconnect initiated");
   }
 }
 
