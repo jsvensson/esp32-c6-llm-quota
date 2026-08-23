@@ -1,7 +1,7 @@
 # Configuration
 PORT := "/dev/cu.usbmodem13101" # Change this to your actual port from `arduino-cli board list`
 FQBN := "esp32:esp32:esp32c6"
-SKETCH := "."           # Change this to your sketch file name
+SKETCH := "."           # Compile the current sketch folder
 
 # Default recipe
 default:

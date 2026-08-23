@@ -1,4 +1,10 @@
 #include <Arduino_GFX_Library.h>
+#include <WiFi.h>
+#include "wifi_config.h"
+
+#ifndef WIFI_SSID
+#error "WIFI_SSID not defined. Copy wifi_config.example.h to wifi_config.h and fill in your credentials."
+#endif
 
 // 1. Define the Data Bus (SPI)
 Arduino_DataBus *bus = new Arduino_ESP32SPI(
@@ -32,6 +38,8 @@ Arduino_GFX *gfx = new Arduino_ST7789(
 #define BAR_HIGH_COLOR 0x07E0  // green
 #define BAR_MED_COLOR  0xFFE0  // yellow
 #define BAR_LOW_COLOR  0xF800  // red
+#define WIFI_CONNECTED_COLOR 0x07E0 // green
+#define WIFI_DISCONNECTED_COLOR 0xF800 // red
 
 // Set to 1 to rotate the display 180 degrees (landscape flipped)
 #define FLIP_DISPLAY 1
@@ -49,10 +57,13 @@ QuotaWindow quotaWindows[] = {
 const int WINDOW_COUNT = sizeof(quotaWindows) / sizeof(quotaWindows[0]);
 
 unsigned long lastUpdate = 0;
+unsigned long lastWiFiCheck = 0;
 
 void setup() {
   Serial.begin(115200);
   Serial.println("Kimi quota display starting");
+
+  setupWiFi();
 
   gfx->begin();
   gfx->setRotation(FLIP_DISPLAY ? 3 : 1); // Landscape: 1 = normal, 3 = 180° flipped
@@ -74,6 +85,42 @@ void loop() {
     lastUpdate = now;
     updateStubQuota();
     drawQuota();
+  }
+
+  if (now - lastWiFiCheck >= 5000) {
+    lastWiFiCheck = now;
+    maintainWiFi();
+  }
+}
+
+void setupWiFi() {
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+
+  Serial.print("Connecting to WiFi: ");
+  Serial.println(WIFI_SSID);
+
+  unsigned long startAttempt = millis();
+  while (WiFi.status() != WL_CONNECTED && millis() - startAttempt < 20000) {
+    delay(500);
+    Serial.print('.');
+  }
+  Serial.println();
+
+  if (WiFi.status() == WL_CONNECTED) {
+    Serial.println("WiFi connected");
+    Serial.print("IP address: ");
+    Serial.println(WiFi.localIP());
+  } else {
+    Serial.println("WiFi connection failed");
+  }
+}
+
+void maintainWiFi() {
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("WiFi disconnected; reconnecting...");
+    WiFi.disconnect();
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   }
 }
 
@@ -138,7 +185,20 @@ void drawQuota() {
     snprintf(numBuf, sizeof(numBuf), "%lu / %lu", win.used, win.limit);
     gfx->setCursor(margin, barY + barH + 4);
     gfx->print(numBuf);
+
+    // Small WiFi status indicator on the first window
+    if (i == 0) {
+      drawWiFiIndicator(screenW - margin - 78, textY + 4);
+    }
   }
+}
+
+void drawWiFiIndicator(int16_t x, int16_t y) {
+  bool connected = (WiFi.status() == WL_CONNECTED);
+  uint16_t color = connected ? WIFI_CONNECTED_COLOR : WIFI_DISCONNECTED_COLOR;
+
+  // 8x8 status square
+  gfx->fillRect(x, y, 8, 8, color);
 }
 
 uint16_t colorForPercent(int pctRemaining) {
