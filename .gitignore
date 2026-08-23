@@ -1,2 +1,5 @@
 # Local WiFi credentials -- never commit real passwords
 wifi_config.h
+
+# Arduino build staging directory
+.build/

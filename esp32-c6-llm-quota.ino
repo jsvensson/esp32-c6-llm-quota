@@ -63,8 +63,7 @@ void setup() {
   Serial.begin(115200);
   Serial.println("Kimi quota display starting");
 
-  setupWiFi();
-
+  // Initialize display early so we can show the WiFi connection screen
   gfx->begin();
   gfx->setRotation(FLIP_DISPLAY ? 3 : 1); // Landscape: 1 = normal, 3 = 180° flipped
   gfx->fillScreen(BG_COLOR);
@@ -73,8 +72,12 @@ void setup() {
   ledcAttach(TFT_BL_PIN, 5000, 8);
   ledcWrite(TFT_BL_PIN, 80);
 
+  setupWiFi();
+
   randomSeed(micros());
 
+  // Clear the WiFi connection screen before showing the gauges
+  gfx->fillScreen(BG_COLOR);
   drawQuota();
 }
 
@@ -93,6 +96,33 @@ void loop() {
   }
 }
 
+void drawWiFiConnectScreen(const char* ssid, int dots) {
+  int16_t screenW = gfx->width();
+  int16_t screenH = gfx->height();
+  const int16_t margin = 8;
+
+  gfx->fillScreen(BG_COLOR);
+
+  gfx->setTextSize(2);
+  gfx->setTextColor(TEXT_COLOR);
+  gfx->setCursor(margin, screenH / 2 - 30);
+  gfx->print("Connecting to WiFi");
+
+  // Animated dots (cycle 1-3)
+  gfx->setCursor(margin, screenH / 2);
+  int dotCount = (dots % 3) + 1;
+  for (int i = 0; i < dotCount; i++) {
+    gfx->print(".");
+  }
+  // Clear any leftover dots from previous frame
+  gfx->fillRect(margin + dotCount * 12, screenH / 2, screenW - margin - dotCount * 12, 16, BG_COLOR);
+
+  gfx->setTextSize(1);
+  gfx->setCursor(margin, screenH / 2 + 24);
+  gfx->print("SSID: ");
+  gfx->print(ssid);
+}
+
 void setupWiFi() {
   WiFi.mode(WIFI_STA);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
@@ -101,19 +131,35 @@ void setupWiFi() {
   Serial.println(WIFI_SSID);
 
   unsigned long startAttempt = millis();
+  int dots = 0;
   while (WiFi.status() != WL_CONNECTED && millis() - startAttempt < 20000) {
+    drawWiFiConnectScreen(WIFI_SSID, dots++);
     delay(500);
     Serial.print('.');
   }
   Serial.println();
 
+  gfx->fillScreen(BG_COLOR);
+
   if (WiFi.status() == WL_CONNECTED) {
     Serial.println("WiFi connected");
     Serial.print("IP address: ");
     Serial.println(WiFi.localIP());
+
+    gfx->setTextSize(2);
+    gfx->setTextColor(WIFI_CONNECTED_COLOR);
+    gfx->setCursor(8, gfx->height() / 2 - 12);
+    gfx->print("WiFi connected");
   } else {
     Serial.println("WiFi connection failed");
+
+    gfx->setTextSize(2);
+    gfx->setTextColor(WIFI_DISCONNECTED_COLOR);
+    gfx->setCursor(8, gfx->height() / 2 - 12);
+    gfx->print("WiFi failed");
   }
+
+  delay(1500);
 }
 
 void maintainWiFi() {
