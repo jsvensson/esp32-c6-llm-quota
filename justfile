@@ -1,6 +1,6 @@
 # Configuration
 PORT := "/dev/cu.usbmodem13101" # Change this to your actual port from `arduino-cli board list`
-FQBN := "esp32:esp32:esp32c6"
+FQBN := "esp32:esp32:esp32c6:CDCOnBoot=cdc"
 SKETCH_NAME := "esp32-c6-llm-quota"
 BUILD_DIR := ".build"
 SKETCH_DIR := BUILD_DIR / SKETCH_NAME
