@@ -1,5 +1,6 @@
 #include <Arduino_GFX_Library.h>
 #include <WiFi.h>
+#include <SPI.h>
 #include <esp32-hal-rgb-led.h>
 #include "wifi_config.h"
 
@@ -7,19 +8,24 @@
 #error "WIFI_SSID not defined. Copy wifi_config.example.h to wifi_config.h and fill in your credentials."
 #endif
 
+// Waveshare ESP32-C6-LCD-1.47 pinout
+#define TFT_DC       15
+#define TFT_CS       14
+#define TFT_SCK      7
+#define TFT_MOSI     6
+#define TFT_RST      21
+#define TFT_BL_PIN   22
+#define STATUS_LED_PIN 8
+
 // 1. Define the Data Bus (SPI)
-Arduino_DataBus *bus = new Arduino_ESP32SPI(
-  15 /* DC */,
-  14 /* CS */,
-  7  /* SCK */,
-  6  /* MOSI */,
-  -1 /* MISO */
-);
+// Arduino_HWSPI on ESP32 takes DC, CS, SCK, MOSI, MISO, SPIClass*, and shared flag.
+// It calls SPI.begin(SCK, MISO, MOSI) internally during gfx->begin().
+Arduino_DataBus *bus = new Arduino_HWSPI(TFT_DC, TFT_CS, TFT_SCK, TFT_MOSI, -1, &SPI);
 
 // 2. Define the Display Driver (ST7789)
 Arduino_GFX *gfx = new Arduino_ST7789(
   bus,
-  21 /* RST */,
+  TFT_RST,
   0  /* rotation */,
   true /* IPS display */,
   172 /* width */,
@@ -29,9 +35,6 @@ Arduino_GFX *gfx = new Arduino_ST7789(
   34 /* col offset2: needed for landscape rotation 1 */,
   0  /* row offset2 */
 );
-
-#define TFT_BL_PIN 22
-#define STATUS_LED_PIN 8
 
 // Colors (RGB565)
 #define BG_COLOR       0x0000
