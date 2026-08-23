@@ -36,6 +36,10 @@ Arduino_GFX *gfx = new Arduino_ST7789(
   0  /* row offset2 */
 );
 
+// Brightness settings (0-255). Lower these if the board runs hot.
+#define DISPLAY_BRIGHTNESS    10   // TFT backlight PWM duty
+#define STATUS_LED_BRIGHTNESS 53  // Onboard RGB LED master brightness
+
 // Colors (RGB565)
 #define BG_COLOR       0x0000
 #define TEXT_COLOR     0xFFFF
@@ -75,7 +79,7 @@ void setup() {
 
   // Backlight via LEDC (ESP32-C6 uses the new unified LEDC API)
   ledcAttach(TFT_BL_PIN, 5000, 8);
-  ledcWrite(TFT_BL_PIN, 80);
+  ledcWrite(TFT_BL_PIN, DISPLAY_BRIGHTNESS);
 
   setupWiFi();
 
@@ -264,10 +268,16 @@ uint16_t colorForPercent(int pctRemaining) {
 }
 
 void setStatusLedFromRgb565(uint16_t color) {
-  // Convert RGB565 to RGB888 and scale to 50% brightness
-  uint8_t r = (((color >> 11) & 0x1F) << 3) >> 1;
-  uint8_t g = (((color >> 5)  & 0x3F) << 2) >> 1;
-  uint8_t b = (((color)       & 0x1F) << 3) >> 1;
+  // Convert RGB565 to RGB888
+  uint8_t r = ((color >> 11) & 0x1F) << 3;
+  uint8_t g = ((color >> 5)  & 0x3F) << 2;
+  uint8_t b = ((color)       & 0x1F) << 3;
+
+  // Scale by STATUS_LED_BRIGHTNESS (0-255)
+  r = (uint8_t)((uint16_t)r * STATUS_LED_BRIGHTNESS / 255);
+  g = (uint8_t)((uint16_t)g * STATUS_LED_BRIGHTNESS / 255);
+  b = (uint8_t)((uint16_t)b * STATUS_LED_BRIGHTNESS / 255);
+
   // The onboard LED expects data in RGB order (not the WS2812 default GRB)
   rgbLedWriteOrdered(STATUS_LED_PIN, LED_COLOR_ORDER_RGB, r, g, b);
 }
