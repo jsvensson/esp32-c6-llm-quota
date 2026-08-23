@@ -1,5 +1,6 @@
 #include <Arduino_GFX_Library.h>
 #include <WiFi.h>
+#include <esp32-hal-rgb-led.h>
 #include "wifi_config.h"
 
 #ifndef WIFI_SSID
@@ -30,6 +31,7 @@ Arduino_GFX *gfx = new Arduino_ST7789(
 );
 
 #define TFT_BL_PIN 22
+#define STATUS_LED_PIN 8
 
 // Colors (RGB565)
 #define BG_COLOR       0x0000
@@ -224,6 +226,11 @@ void drawQuota() {
     uint16_t barColor = colorForPercent(pctRemaining);
     gfx->fillRect(margin, barY, filledW, barH, barColor);
 
+    // Match the onboard LED to the 5h window gauge color
+    if (i == 0) {
+      setStatusLedFromRgb565(barColor);
+    }
+
     // Clear and redraw used / limit numbers
     gfx->setTextSize(1);
     gfx->fillRect(margin, barY + barH + 4, 84, 10, BG_COLOR);
@@ -251,4 +258,13 @@ uint16_t colorForPercent(int pctRemaining) {
   if (pctRemaining > 50) return BAR_HIGH_COLOR;
   if (pctRemaining > 20) return BAR_MED_COLOR;
   return BAR_LOW_COLOR;
+}
+
+void setStatusLedFromRgb565(uint16_t color) {
+  // Convert RGB565 to RGB888 and scale to 50% brightness
+  uint8_t r = (((color >> 11) & 0x1F) << 3) >> 1;
+  uint8_t g = (((color >> 5)  & 0x3F) << 2) >> 1;
+  uint8_t b = (((color)       & 0x1F) << 3) >> 1;
+  // The onboard LED expects data in RGB order (not the WS2812 default GRB)
+  rgbLedWriteOrdered(STATUS_LED_PIN, LED_COLOR_ORDER_RGB, r, g, b);
 }
