@@ -157,6 +157,10 @@ void setupWiFi() {
   Serial.print("[WiFi] Password length: ");
   Serial.println(strlen(WIFI_PASSWORD));
 
+  // Clear any stale connection state before starting
+  WiFi.disconnect(true);
+  delay(100);
+
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   Serial.println("[WiFi] Starting connection...");
 
