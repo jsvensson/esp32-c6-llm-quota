@@ -45,8 +45,8 @@ Arduino_GFX *gfx = new Arduino_ST7789(
 #define TEXT_COLOR     0xFFFF
 #define BAR_BG_COLOR   0x18E3  // dark grey
 #define BAR_HIGH_COLOR 0x07E0  // green
-#define BAR_MED_COLOR  0xFFE0  // yellow
-#define BAR_LOW_COLOR  0xF800  // red
+#define BAR_MED_COLOR 0xFD20  // orange
+#define BAR_LOW_COLOR 0xF800  // red
 #define WIFI_CONNECTED_COLOR 0x07E0 // green
 #define WIFI_DISCONNECTED_COLOR 0xF800 // red
 
