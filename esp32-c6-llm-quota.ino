@@ -114,7 +114,10 @@ void loop() {
   maintainNTP();
   maintainMQTT();
 
-  if (now - lastUpdate >= 1000) {
+  // Redraw every 5 s. The reset countdown only has minute-level granularity,
+  // and this is frequent enough for the status indicators and bar animation.
+  // MQTT messages still trigger an immediate redraw in mqttCallback().
+  if (now - lastUpdate >= 5000) {
     lastUpdate = now;
     if (!quotaDataReceived) {
       updateStubQuota();
