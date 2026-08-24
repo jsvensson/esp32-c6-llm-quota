@@ -3,6 +3,7 @@
 #include <SPI.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
+#include <time.h>
 #include <esp32-hal-rgb-led.h>
 #include "config.h"
 
@@ -64,11 +65,13 @@ Arduino_GFX *gfx = new Arduino_ST7789(
 struct QuotaWindow {
   const char* label;
   int pctAvailable;
+  time_t resetsAt;
+  bool hasResetAt;
 };
 
 QuotaWindow quotaWindows[] = {
-  { "5h", 22 },
-  { "7d", 75 }
+  { "5h", 22, 0, false },
+  { "7d", 75, 0, false }
 };
 const int WINDOW_COUNT = sizeof(quotaWindows) / sizeof(quotaWindows[0]);
 
@@ -76,6 +79,7 @@ unsigned long lastUpdate = 0;
 unsigned long lastWiFiCheck = 0;
 unsigned long lastMqttAttempt = 0;
 bool quotaDataReceived = false;
+bool timeSynced = false;
 
 WiFiClient wifiClient;
 PubSubClient mqttClient(wifiClient);
@@ -95,6 +99,7 @@ void setup() {
 
   setupWiFi();
   setupMQTT();
+  setupNTP();
 
   randomSeed(micros());
 
@@ -106,6 +111,7 @@ void setup() {
 void loop() {
   unsigned long now = millis();
 
+  maintainNTP();
   maintainMQTT();
 
   if (now - lastUpdate >= 1000) {
@@ -263,6 +269,25 @@ void setupMQTT() {
   mqttClient.setCallback(mqttCallback);
 }
 
+void setupNTP() {
+  Serial.print("[NTP] Configuring server: ");
+  Serial.println(NTP_SERVER);
+  configTime(0, 0, NTP_SERVER);
+}
+
+void maintainNTP() {
+  if (timeSynced) {
+    return;
+  }
+
+  time_t now = time(nullptr);
+  if (now > 1000000000) {
+    timeSynced = true;
+    Serial.print("[NTP] Time synced: ");
+    Serial.println(now);
+  }
+}
+
 const char* mqttStateName(int state) {
   switch (state) {
     case MQTT_CONNECTION_TIMEOUT:      return "MQTT_CONNECTION_TIMEOUT";
@@ -332,21 +357,31 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     return;
   }
 
-  // Expected payload: {"5h": 70, "7d": 93}
-  // Values are integer percentages of remaining quota (0-100).
+  // Expected payload: {"5h": {"pct": 70, "resets_at": 1756340000}, ...}
   String log;
   for (int i = 0; i < WINDOW_COUNT; i++) {
     QuotaWindow &win = quotaWindows[i];
-    if (!doc[win.label].is<int>()) {
+    if (!doc[win.label].is<JsonObject>()) {
       continue;
     }
-    int pct = doc[win.label].as<int>();
+
+    JsonObject obj = doc[win.label].as<JsonObject>();
+    if (!obj["pct"].is<int>()) {
+      continue;
+    }
+
+    int pct = obj["pct"].as<int>();
+    bool hasReset = obj["resets_at"].is<time_t>();
+    time_t resetTs = hasReset ? obj["resets_at"].as<time_t>() : 0;
+
     if (pct < 0) {
       pct = 0;
     } else if (pct > 100) {
       pct = 100;
     }
     win.pctAvailable = pct;
+    win.hasResetAt = hasReset;
+    win.resetsAt = resetTs;
 
     if (log.length() > 0) {
       log += ", ";
@@ -354,7 +389,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     log += win.label;
     log += "=";
     log += win.pctAvailable;
-    log += "% available";
+    log += "%";
   }
 
   if (log.length() > 0) {
@@ -431,11 +466,42 @@ void drawQuota() {
       setStatusLedFromRgb565(barColor);
     }
 
+    // Show the reset countdown below the bar when we have a timestamp
+    gfx->setTextSize(1);
+    gfx->fillRect(margin, barY + barH + 4, barW, 10, BG_COLOR);
+    if (timeSynced && win.hasResetAt) {
+      char timeBuf[32];
+      formatTimeLeft(win.resetsAt, timeBuf, sizeof(timeBuf));
+      gfx->setCursor(margin, barY + barH + 4);
+      gfx->print("Reset: ");
+      gfx->print(timeBuf);
+    }
+
     // Small WiFi and MQTT status indicators on the first window
     if (i == 0) {
       drawWiFiIndicator(screenW - margin - 78, textY + 4);
       drawMqttIndicator(screenW - margin - 90, textY + 4);
     }
+  }
+}
+
+void formatTimeLeft(time_t resetsAt, char* buf, size_t bufSize) {
+  time_t now = time(nullptr);
+  long secondsLeft = (long)(resetsAt - now);
+  if (secondsLeft < 0) {
+    secondsLeft = 0;
+  }
+
+  long days = secondsLeft / 86400;
+  long hours = (secondsLeft % 86400) / 3600;
+  long minutes = (secondsLeft % 3600) / 60;
+
+  if (days > 0) {
+    snprintf(buf, bufSize, "%ldd %ldh", days, hours);
+  } else if (hours > 0) {
+    snprintf(buf, bufSize, "%ldh %ldm", hours, minutes);
+  } else {
+    snprintf(buf, bufSize, "%ldm", minutes);
   }
 }
 

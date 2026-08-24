@@ -41,31 +41,37 @@ display. Quota data arrives over MQTT; WiFi is used to reach the broker.
 
    #define MQTT_HOST        "192.168.x.x"
    #define MQTT_PORT        1883
-   #define MQTT_CLIENT_ID   "esp32-c6-quota"
-   #define MQTT_TOPIC_QUOTA "quota/llm"
-   ```
+    #define MQTT_CLIENT_ID   "esp32-c6-quota"
+    #define MQTT_TOPIC_QUOTA "quota/llm"
+
+    #define NTP_SERVER "pool.ntp.org"
+    ```
 
 `config.h` is listed in `.gitignore`, so your real credentials will not
 be committed.
 
 ## MQTT payload
 
-The device subscribes to `MQTT_TOPIC_QUOTA` and expects a JSON object that
-maps each quota window label to an integer percentage of remaining
-quota (0-100):
+The device subscribes to `MQTT_TOPIC_QUOTA` and expects a JSON object where
+each quota window maps to an object with `pct` (remaining quota, 0-100) and
+`resets_at` (Unix epoch timestamp when the window resets):
 
 ```json
-{"5h": 70, "7d": 93}
+{"5h": {"pct": 70, "resets_at": 1756340000}, "7d": {"pct": 93, "resets_at": 1756340000}}
 ```
 
-In the example above, `70` means 70 % left on the 5h window and `93`
-means 93 % left on the 7d window.
+`resets_at` is optional. Windows without a `resets_at` value show no
+`Reset:` line.
+
+The ESP32 syncs its clock from `NTP_SERVER` and renders the time left until
+reset below each bar as `Reset: 1h 23m`. The countdown is hidden until the
+clock is synced.
 
 Publish the message with the retain flag set so the device receives the
 latest values immediately when it (re)connects:
 
 ```sh
-mosquitto_pub -h 192.168.x.x -t quota/llm -r -m '{"5h": 70, "7d": 93}'
+mosquitto_pub -h 192.168.x.x -t quota/llm -r -m '{"5h": {"pct": 70, "resets_at": 1756340000}, "7d": {"pct": 93, "resets_at": 1756340000}}'
 ```
 
 Until the first valid message arrives, the display shows randomly generated

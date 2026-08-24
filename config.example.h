@@ -14,4 +14,7 @@
 #define MQTT_CLIENT_ID   "esp32-c6-quota"
 #define MQTT_TOPIC_QUOTA "quota/llm"
 
+// NTP server for converting reset timestamps into time-left strings
+#define NTP_SERVER "pool.ntp.org"
+
 #endif // CONFIG_H
