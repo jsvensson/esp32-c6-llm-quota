@@ -1,7 +1,7 @@
-# ESP32-C6 Quota Display with WiFi
+# ESP32-C6 Quota Display with WiFi and MQTT
 
 Arduino sketch for the ESP32-C6 that shows quota usage bars on an ST7789
-display and connects to WiFi.
+display. Quota data arrives over MQTT; WiFi is used to reach the broker.
 
 ## Requirements
 
@@ -15,31 +15,61 @@ display and connects to WiFi.
 
   (Requires the Espressif boards manager URL if not already configured.)
 
-- **GFX Library for Arduino** (by moononournation) — install with:
+- **GFX Library for Arduino** (by moononournation), **PubSubClient** (by
+  Nick O'Leary), and **ArduinoJson** (by Benoit Blanchon) — install with:
 
   ```sh
-  arduino-cli lib install "GFX Library for Arduino"
+  arduino-cli lib install "GFX Library for Arduino" "PubSubClient" "ArduinoJson"
   ```
 
 `WiFi` and `SPI` are bundled with the ESP32 core and need no separate install.
 
-## Configure WiFi credentials
+## Configure credentials
 
 1. Copy the example config file:
 
    ```sh
-   cp wifi_config.example.h wifi_config.h
+   cp config.example.h config.h
    ```
 
-2. Edit `wifi_config.h` and set your network credentials:
+2. Edit `config.h` and set your WiFi network credentials and MQTT broker
+   settings:
 
    ```cpp
    #define WIFI_SSID     "your-actual-ssid"
    #define WIFI_PASSWORD "your-actual-password"
+
+   #define MQTT_HOST        "192.168.x.x"
+   #define MQTT_PORT        1883
+   #define MQTT_CLIENT_ID   "esp32-c6-quota"
+   #define MQTT_TOPIC_QUOTA "quota/llm"
    ```
 
-`wifi_config.h` is listed in `.gitignore`, so your real credentials will not
+`config.h` is listed in `.gitignore`, so your real credentials will not
 be committed.
+
+## MQTT payload
+
+The device subscribes to `MQTT_TOPIC_QUOTA` and expects a JSON object that
+maps each quota window label to an integer percentage of remaining
+quota (0-100):
+
+```json
+{"5h": 70, "7d": 93}
+```
+
+In the example above, `70` means 70 % left on the 5h window and `93`
+means 93 % left on the 7d window.
+
+Publish the message with the retain flag set so the device receives the
+latest values immediately when it (re)connects:
+
+```sh
+mosquitto_pub -h 192.168.x.x -t quota/llm -r -m '{"5h": 70, "7d": 93}'
+```
+
+Until the first valid message arrives, the display shows randomly generated
+stub data.
 
 ## Build
 

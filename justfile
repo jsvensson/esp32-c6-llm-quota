@@ -14,8 +14,8 @@ default:
 build:
     @mkdir -p {{SKETCH_DIR}}
     @cp {{SKETCH_NAME}}.ino {{SKETCH_DIR}}/
-    @[ -f wifi_config.h ] && cp wifi_config.h {{SKETCH_DIR}}/ || true
-    @cp wifi_config.example.h {{SKETCH_DIR}}/
+    @[ -f config.h ] && cp config.h {{SKETCH_DIR}}/ || true
+    @cp config.example.h {{SKETCH_DIR}}/
     arduino-cli compile --fqbn {{FQBN}} --build-path {{BUILD_DIR}}/build {{SKETCH_DIR}}
 
 upload:
