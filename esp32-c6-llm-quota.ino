@@ -1,11 +1,17 @@
 #include <Arduino_GFX_Library.h>
 #include <WiFi.h>
 #include <SPI.h>
+#include <PubSubClient.h>
+#include <ArduinoJson.h>
 #include <esp32-hal-rgb-led.h>
-#include "wifi_config.h"
+#include "config.h"
 
 #ifndef WIFI_SSID
-#error "WIFI_SSID not defined. Copy wifi_config.example.h to wifi_config.h and fill in your credentials."
+#error "WIFI_SSID not defined. Copy config.example.h to config.h and fill in your credentials."
+#endif
+
+#ifndef MQTT_HOST
+#error "MQTT_HOST not defined. Copy config.example.h to config.h and fill in your broker settings."
 #endif
 
 // Waveshare ESP32-C6-LCD-1.47 pinout
@@ -49,24 +55,30 @@ Arduino_GFX *gfx = new Arduino_ST7789(
 #define BAR_LOW_COLOR 0xF800  // red
 #define WIFI_CONNECTED_COLOR 0x07E0 // green
 #define WIFI_DISCONNECTED_COLOR 0xF800 // red
+#define MQTT_CONNECTED_COLOR 0x07E0 // green
+#define MQTT_DISCONNECTED_COLOR 0xF800 // red
 
 // Set to 1 to rotate the display 180 degrees (landscape flipped)
 #define FLIP_DISPLAY 1
 
 struct QuotaWindow {
   const char* label;
-  uint32_t used;
-  uint32_t limit;
+  int pctAvailable;
 };
 
 QuotaWindow quotaWindows[] = {
-  { "5h", 45,   200  },
-  { "7d", 1230, 5000 }
+  { "5h", 22 },
+  { "7d", 75 }
 };
 const int WINDOW_COUNT = sizeof(quotaWindows) / sizeof(quotaWindows[0]);
 
 unsigned long lastUpdate = 0;
 unsigned long lastWiFiCheck = 0;
+unsigned long lastMqttAttempt = 0;
+bool quotaDataReceived = false;
+
+WiFiClient wifiClient;
+PubSubClient mqttClient(wifiClient);
 
 void setup() {
   Serial.begin(115200);
@@ -82,6 +94,7 @@ void setup() {
   ledcWrite(TFT_BL_PIN, DISPLAY_BRIGHTNESS);
 
   setupWiFi();
+  setupMQTT();
 
   randomSeed(micros());
 
@@ -93,9 +106,13 @@ void setup() {
 void loop() {
   unsigned long now = millis();
 
+  maintainMQTT();
+
   if (now - lastUpdate >= 1000) {
     lastUpdate = now;
-    updateStubQuota();
+    if (!quotaDataReceived) {
+      updateStubQuota();
+    }
     drawQuota();
   }
 
@@ -234,12 +251,130 @@ void maintainWiFi() {
   }
 }
 
+void setupMQTT() {
+  Serial.print("[MQTT] Server: ");
+  Serial.print(MQTT_HOST);
+  Serial.print(":");
+  Serial.print(MQTT_PORT);
+  Serial.print(", client ID: ");
+  Serial.println(MQTT_CLIENT_ID);
+
+  mqttClient.setServer(MQTT_HOST, MQTT_PORT);
+  mqttClient.setCallback(mqttCallback);
+}
+
+const char* mqttStateName(int state) {
+  switch (state) {
+    case MQTT_CONNECTION_TIMEOUT:      return "MQTT_CONNECTION_TIMEOUT";
+    case MQTT_CONNECTION_LOST:         return "MQTT_CONNECTION_LOST";
+    case MQTT_CONNECT_FAILED:          return "MQTT_CONNECT_FAILED";
+    case MQTT_DISCONNECTED:            return "MQTT_DISCONNECTED";
+    case MQTT_CONNECTED:               return "MQTT_CONNECTED";
+    case MQTT_CONNECT_BAD_PROTOCOL:    return "MQTT_CONNECT_BAD_PROTOCOL";
+    case MQTT_CONNECT_BAD_CLIENT_ID:   return "MQTT_CONNECT_BAD_CLIENT_ID";
+    case MQTT_CONNECT_UNAVAILABLE:     return "MQTT_CONNECT_UNAVAILABLE";
+    case MQTT_CONNECT_BAD_CREDENTIALS: return "MQTT_CONNECT_BAD_CREDENTIALS";
+    case MQTT_CONNECT_UNAUTHORIZED:    return "MQTT_CONNECT_UNAUTHORIZED";
+    default:                           return "UNKNOWN";
+  }
+}
+
+void maintainMQTT() {
+  if (WiFi.status() != WL_CONNECTED) {
+    return;
+  }
+
+  if (mqttClient.connected()) {
+    mqttClient.loop();
+    return;
+  }
+
+  // Non-blocking reconnect: attempt at most every 5 seconds
+  unsigned long now = millis();
+  if (now - lastMqttAttempt < 5000) {
+    return;
+  }
+  lastMqttAttempt = now;
+
+  Serial.println("[MQTT] Connecting...");
+  if (mqttClient.connect(MQTT_CLIENT_ID)) {
+    Serial.println("[MQTT] Connected");
+    if (mqttClient.subscribe(MQTT_TOPIC_QUOTA)) {
+      Serial.print("[MQTT] Subscribed to ");
+      Serial.println(MQTT_TOPIC_QUOTA);
+    } else {
+      Serial.print("[MQTT] Subscribe to ");
+      Serial.print(MQTT_TOPIC_QUOTA);
+      Serial.println(" failed");
+    }
+  } else {
+    int state = mqttClient.state();
+    Serial.print("[MQTT] Connect failed, rc=");
+    Serial.print(state);
+    Serial.print(" (");
+    Serial.print(mqttStateName(state));
+    Serial.println("), will retry");
+  }
+}
+
+void mqttCallback(char* topic, byte* payload, unsigned int length) {
+  Serial.print("[MQTT] Message on ");
+  Serial.print(topic);
+  Serial.print(" (");
+  Serial.print(length);
+  Serial.println(" bytes)");
+
+  JsonDocument doc;
+  DeserializationError err = deserializeJson(doc, payload, length);
+  if (err) {
+    Serial.print("[MQTT] JSON parse failed: ");
+    Serial.println(err.c_str());
+    return;
+  }
+
+  // Expected payload: {"5h": 70, "7d": 93}
+  // Values are integer percentages of remaining quota (0-100).
+  String log;
+  for (int i = 0; i < WINDOW_COUNT; i++) {
+    QuotaWindow &win = quotaWindows[i];
+    if (!doc[win.label].is<int>()) {
+      continue;
+    }
+    int pct = doc[win.label].as<int>();
+    if (pct < 0) {
+      pct = 0;
+    } else if (pct > 100) {
+      pct = 100;
+    }
+    win.pctAvailable = pct;
+
+    if (log.length() > 0) {
+      log += ", ";
+    }
+    log += win.label;
+    log += "=";
+    log += win.pctAvailable;
+    log += "% available";
+  }
+
+  if (log.length() > 0) {
+    quotaDataReceived = true;
+    Serial.print("[MQTT] Quota updated: ");
+    Serial.println(log);
+    drawQuota();
+  } else {
+    Serial.println("[MQTT] No known quota windows in payload, ignoring");
+  }
+}
+
 void updateStubQuota() {
   for (int i = 0; i < WINDOW_COUNT; i++) {
-    uint32_t increment = random(1, 5) + (i == 1 ? 3 : 0);
-    quotaWindows[i].used += increment;
-    if (quotaWindows[i].used > quotaWindows[i].limit) {
-      quotaWindows[i].used = 0;
+    int delta = random(-5, 6) + (i == 1 ? -2 : 0);
+    quotaWindows[i].pctAvailable += delta;
+    if (quotaWindows[i].pctAvailable > 100) {
+      quotaWindows[i].pctAvailable = 100;
+    } else if (quotaWindows[i].pctAvailable < 0) {
+      quotaWindows[i].pctAvailable = 0;
     }
   }
 }
@@ -259,16 +394,14 @@ void drawQuota() {
 
   for (int i = 0; i < WINDOW_COUNT; i++) {
     QuotaWindow &win = quotaWindows[i];
-    int pctRemaining = (win.limit > 0)
-      ? ((win.limit - win.used) * 100 / win.limit)
-      : 0;
+    int pctAvailable = win.pctAvailable;
 
     int16_t y0 = i * bandH;
     int16_t textY = y0 + margin;
     int16_t barY = textY + 22;
     int16_t barW = screenW - 2 * margin;
     int16_t barH = 26;
-    int16_t filledW = (int32_t)barW * pctRemaining / 100;
+    int16_t filledW = (int32_t)barW * pctAvailable / 100;
 
     // Window label (static, safe to redraw every time)
     gfx->setTextSize(2);
@@ -276,16 +409,21 @@ void drawQuota() {
     gfx->setCursor(margin, textY);
     gfx->print(win.label);
 
-    // Clear the percentage text area before writing the new value
-    gfx->fillRect(screenW - margin - 60, textY, 60, 16, BG_COLOR);
+    // Right-align the percentage text on the right side of the window label.
+    // Clear the full possible width first to avoid ghosting from longer values.
+    gfx->setTextSize(2);
     char pctBuf[8];
-    snprintf(pctBuf, sizeof(pctBuf), "%d%%", pctRemaining);
-    gfx->setCursor(screenW - margin - 54, textY);
+    snprintf(pctBuf, sizeof(pctBuf), "%d%%", pctAvailable);
+    int16_t pctW = strlen(pctBuf) * 6 * 2;
+    int16_t maxPctW = strlen("100%") * 6 * 2;
+    int16_t pctX = screenW - margin - pctW;
+    gfx->fillRect(screenW - margin - maxPctW, textY, maxPctW, 16, BG_COLOR);
+    gfx->setCursor(pctX, textY);
     gfx->print(pctBuf);
 
     // Redraw the bar background, then the fill, to erase the previous frame
     gfx->fillRect(margin, barY, barW, barH, BAR_BG_COLOR);
-    uint16_t barColor = colorForPercent(pctRemaining);
+    uint16_t barColor = colorForPercent(pctAvailable);
     gfx->fillRect(margin, barY, filledW, barH, barColor);
 
     // Match the onboard LED to the 5h window gauge color
@@ -293,17 +431,10 @@ void drawQuota() {
       setStatusLedFromRgb565(barColor);
     }
 
-    // Clear and redraw used / limit numbers
-    gfx->setTextSize(1);
-    gfx->fillRect(margin, barY + barH + 4, 84, 10, BG_COLOR);
-    char numBuf[32];
-    snprintf(numBuf, sizeof(numBuf), "%lu / %lu", win.used, win.limit);
-    gfx->setCursor(margin, barY + barH + 4);
-    gfx->print(numBuf);
-
-    // Small WiFi status indicator on the first window
+    // Small WiFi and MQTT status indicators on the first window
     if (i == 0) {
       drawWiFiIndicator(screenW - margin - 78, textY + 4);
+      drawMqttIndicator(screenW - margin - 90, textY + 4);
     }
   }
 }
@@ -316,9 +447,16 @@ void drawWiFiIndicator(int16_t x, int16_t y) {
   gfx->fillRect(x, y, 8, 8, color);
 }
 
-uint16_t colorForPercent(int pctRemaining) {
-  if (pctRemaining > 50) return BAR_HIGH_COLOR;
-  if (pctRemaining > 20) return BAR_MED_COLOR;
+void drawMqttIndicator(int16_t x, int16_t y) {
+  uint16_t color = mqttClient.connected() ? MQTT_CONNECTED_COLOR : MQTT_DISCONNECTED_COLOR;
+
+  // 8x8 status square
+  gfx->fillRect(x, y, 8, 8, color);
+}
+
+uint16_t colorForPercent(int pctAvailable) {
+  if (pctAvailable > 50) return BAR_HIGH_COLOR;
+  if (pctAvailable > 20) return BAR_MED_COLOR;
   return BAR_LOW_COLOR;
 }
 
