@@ -84,7 +84,10 @@ stub data.
 If no quota change has been received for `POWER_SAVE_AFTER_MINUTES`, the
 device turns off the TFT backlight and the onboard RGB LED. WiFi, MQTT and
 NTP keep running, and any new MQTT message wakes the device immediately,
-restores the backlight, and redraws the display.
+restoring the backlight and redrawing the display.
+
+You can also press the **BOOT button** (GPIO 9) to toggle power-save mode
+on or off at any time.
 
 ## Build
 
