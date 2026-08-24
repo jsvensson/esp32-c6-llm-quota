@@ -41,12 +41,11 @@ display. Quota data arrives over MQTT; WiFi is used to reach the broker.
 
    #define MQTT_HOST        "192.168.x.x"
    #define MQTT_PORT        1883
-    #define MQTT_CLIENT_ID   "esp32-c6-quota"
-    #define MQTT_TOPIC_QUOTA "quota/llm"
+   #define MQTT_CLIENT_ID   "esp32-c6-quota"
+   #define MQTT_TOPIC_QUOTA "quota/llm"
 
-    #define NTP_SERVER "pool.ntp.org"
-
-    #define POWER_SAVE_AFTER_MINUTES 60
+   #define NTP_SERVER "pool.ntp.org"
+   #define POWER_SAVE_AFTER_MINUTES 60
     ```
 
 `config.h` is listed in `.gitignore`, so your real credentials will not
