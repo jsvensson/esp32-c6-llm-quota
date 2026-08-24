@@ -78,8 +78,11 @@ const int WINDOW_COUNT = sizeof(quotaWindows) / sizeof(quotaWindows[0]);
 unsigned long lastUpdate = 0;
 unsigned long lastWiFiCheck = 0;
 unsigned long lastMqttAttempt = 0;
+unsigned long lastQuotaChangeMillis = 0;
+unsigned long bootMillis = 0;
 bool quotaDataReceived = false;
 bool timeSynced = false;
+bool powerSaveActive = false;
 
 WiFiClient wifiClient;
 PubSubClient mqttClient(wifiClient);
@@ -102,6 +105,7 @@ void setup() {
   setupNTP();
 
   randomSeed(micros());
+  bootMillis = millis();
 
   // Clear the WiFi connection screen before showing the gauges
   gfx->fillScreen(BG_COLOR);
@@ -114,15 +118,28 @@ void loop() {
   maintainNTP();
   maintainMQTT();
 
-  // Redraw every 5 s. The reset countdown only has minute-level granularity,
-  // and this is frequent enough for the status indicators and bar animation.
-  // MQTT messages still trigger an immediate redraw in mqttCallback().
+  // Redraw every 5 s while awake. The reset countdown only has minute-level
+  // granularity, and this is frequent enough for the status indicators and bar
+  // animation. MQTT messages still trigger an immediate redraw in mqttCallback().
   if (now - lastUpdate >= 5000) {
     lastUpdate = now;
-    if (!quotaDataReceived) {
-      updateStubQuota();
+    if (!powerSaveActive) {
+      if (!quotaDataReceived) {
+        updateStubQuota();
+      }
+      drawQuota();
     }
-    drawQuota();
+  }
+
+  // Enter power-save after the configured idle timeout, but stay awake for at
+  // least that long after the initial boot so the display is visible on startup.
+  // A value of 0 disables power-save entirely. WiFi/MQTT/NTP keep running so a
+  // new quota message can wake the device in mqttCallback().
+  unsigned long powerSaveTimeoutMs = (unsigned long)POWER_SAVE_AFTER_MINUTES * 60000UL;
+  if (POWER_SAVE_AFTER_MINUTES > 0 && quotaDataReceived && !powerSaveActive &&
+      (now - bootMillis >= powerSaveTimeoutMs) &&
+      (now - lastQuotaChangeMillis >= powerSaveTimeoutMs)) {
+    enterPowerSave();
   }
 
   if (now - lastWiFiCheck >= 5000) {
@@ -397,8 +414,12 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 
   if (log.length() > 0) {
     quotaDataReceived = true;
+    lastQuotaChangeMillis = millis();
     Serial.print("[MQTT] Quota updated: ");
     Serial.println(log);
+    if (powerSaveActive) {
+      exitPowerSave();
+    }
     drawQuota();
   } else {
     Serial.println("[MQTT] No known quota windows in payload, ignoring");
@@ -521,6 +542,19 @@ void drawMqttIndicator(int16_t x, int16_t y) {
 
   // 8x8 status square
   gfx->fillRect(x, y, 8, 8, color);
+}
+
+void enterPowerSave() {
+  powerSaveActive = true;
+  ledcWrite(TFT_BL_PIN, 0);
+  rgbLedWriteOrdered(STATUS_LED_PIN, LED_COLOR_ORDER_RGB, 0, 0, 0);
+  Serial.println("[POWER] Entering power-save mode");
+}
+
+void exitPowerSave() {
+  powerSaveActive = false;
+  ledcWrite(TFT_BL_PIN, DISPLAY_BRIGHTNESS);
+  Serial.println("[POWER] Leaving power-save mode");
 }
 
 uint16_t colorForPercent(int pctAvailable) {

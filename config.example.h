@@ -17,4 +17,8 @@
 // NTP server for converting reset timestamps into time-left strings
 #define NTP_SERVER "pool.ntp.org"
 
+// Power saving: turn off backlight and LED after this many minutes of no
+// quota changes. A new MQTT message wakes the device immediately.
+#define POWER_SAVE_AFTER_MINUTES 60
+
 #endif // CONFIG_H

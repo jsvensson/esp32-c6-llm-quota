@@ -45,6 +45,8 @@ display. Quota data arrives over MQTT; WiFi is used to reach the broker.
     #define MQTT_TOPIC_QUOTA "quota/llm"
 
     #define NTP_SERVER "pool.ntp.org"
+
+    #define POWER_SAVE_AFTER_MINUTES 60
     ```
 
 `config.h` is listed in `.gitignore`, so your real credentials will not
@@ -76,6 +78,13 @@ mosquitto_pub -h 192.168.x.x -t quota/llm -r -m '{"5h": {"pct": 70, "resets_at":
 
 Until the first valid message arrives, the display shows randomly generated
 stub data.
+
+## Power saving
+
+If no quota change has been received for `POWER_SAVE_AFTER_MINUTES`, the
+device turns off the TFT backlight and the onboard RGB LED. WiFi, MQTT and
+NTP keep running, and any new MQTT message wakes the device immediately,
+restores the backlight, and redraws the display.
 
 ## Build
 
