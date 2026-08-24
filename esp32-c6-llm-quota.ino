@@ -23,6 +23,7 @@
 #define TFT_RST      21
 #define TFT_BL_PIN   22
 #define STATUS_LED_PIN 8
+#define BOOT_BUTTON_PIN 9
 
 // 1. Define the Data Bus (SPI)
 // Arduino_HWSPI on ESP32 takes DC, CS, SCK, MOSI, MISO, SPIClass*, and shared flag.
@@ -83,6 +84,8 @@ unsigned long bootMillis = 0;
 bool quotaDataReceived = false;
 bool timeSynced = false;
 bool powerSaveActive = false;
+bool bootButtonPressed = false;
+unsigned long lastBootButtonDebounce = 0;
 
 WiFiClient wifiClient;
 PubSubClient mqttClient(wifiClient);
@@ -103,6 +106,8 @@ void setup() {
   setupWiFi();
   setupMQTT();
   setupNTP();
+
+  pinMode(BOOT_BUTTON_PIN, INPUT_PULLUP);
 
   randomSeed(micros());
   bootMillis = millis();
@@ -140,6 +145,17 @@ void loop() {
       (now - bootMillis >= powerSaveTimeoutMs) &&
       (now - lastQuotaChangeMillis >= powerSaveTimeoutMs)) {
     enterPowerSave();
+  }
+
+  // Handle the BOOT button (active LOW) to manually toggle power-save mode.
+  // A simple 200 ms debounce prevents accidental double toggles.
+  bool buttonDown = (digitalRead(BOOT_BUTTON_PIN) == LOW);
+  if (buttonDown && !bootButtonPressed && (now - lastBootButtonDebounce >= 200)) {
+    bootButtonPressed = true;
+    lastBootButtonDebounce = now;
+    togglePowerSave();
+  } else if (!buttonDown && bootButtonPressed) {
+    bootButtonPressed = false;
   }
 
   if (now - lastWiFiCheck >= 5000) {
@@ -555,6 +571,16 @@ void exitPowerSave() {
   powerSaveActive = false;
   ledcWrite(TFT_BL_PIN, DISPLAY_BRIGHTNESS);
   Serial.println("[POWER] Leaving power-save mode");
+}
+
+void togglePowerSave() {
+  if (powerSaveActive) {
+    exitPowerSave();
+    lastQuotaChangeMillis = millis();
+    drawQuota();
+  } else {
+    enterPowerSave();
+  }
 }
 
 uint16_t colorForPercent(int pctAvailable) {
