@@ -536,12 +536,12 @@ void drawQuota() {
       }
     }
 
-    // Small WiFi and MQTT status indicators on the first window
-    if (i == 0) {
-      drawWiFiIndicator(screenW - margin - 78, textY + 4);
-      drawMqttIndicator(screenW - margin - 90, textY + 4);
-    }
   }
+
+  // Draw the WiFi and MQTT status indicators in the lower-right corner.
+  int16_t indicatorY = screenH - margin - 8;
+  drawWiFiIndicator(screenW - margin - 8, indicatorY);
+  drawMqttIndicator(screenW - margin - 20, indicatorY);
 }
 
 void formatTimeLeft(time_t resetsAt, char* buf, size_t bufSize) {
