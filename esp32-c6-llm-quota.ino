@@ -321,6 +321,9 @@ void maintainNTP() {
     timeSynced = true;
     Serial.print("[NTP] Time synced: ");
     Serial.println(now);
+    if (!powerSaveActive) {
+      drawQuota();
+    }
   }
 }
 
@@ -506,15 +509,20 @@ void drawQuota() {
       setStatusLedFromRgb565(barColor);
     }
 
-    // Show the reset countdown below the bar when we have a timestamp
+    // Show the reset countdown below the bar when we have a timestamp.
+    // If the clock is not synced yet, show a placeholder instead.
     gfx->setTextSize(1);
     gfx->fillRect(margin, barY + barH + 4, barW, 10, BG_COLOR);
-    if (timeSynced && win.hasResetAt) {
-      char timeBuf[32];
-      formatTimeLeft(win.resetsAt, timeBuf, sizeof(timeBuf));
+    if (win.hasResetAt) {
       gfx->setCursor(margin, barY + barH + 4);
       gfx->print("Reset: ");
-      gfx->print(timeBuf);
+      if (timeSynced) {
+        char timeBuf[32];
+        formatTimeLeft(win.resetsAt, timeBuf, sizeof(timeBuf));
+        gfx->print(timeBuf);
+      } else {
+        gfx->print("--");
+      }
     }
 
     // Small WiFi and MQTT status indicators on the first window
