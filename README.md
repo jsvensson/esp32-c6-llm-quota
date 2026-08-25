@@ -91,6 +91,9 @@ restoring the backlight and redrawing the display.
 You can also press the **BOOT button** (GPIO 9) to toggle power-save mode
 on or off at any time.
 
+The small WiFi and MQTT status squares in the lower-right corner can be
+hidden by setting `SHOW_CONNECTIVITY_DOTS` to `0` in `config.h`.
+
 ## Build
 
 ```sh

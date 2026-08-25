@@ -539,9 +539,11 @@ void drawQuota() {
   }
 
   // Draw the WiFi and MQTT status indicators in the lower-right corner.
+#if SHOW_CONNECTIVITY_DOTS
   int16_t indicatorY = screenH - margin - 8;
   drawWiFiIndicator(screenW - margin - 8, indicatorY);
   drawMqttIndicator(screenW - margin - 20, indicatorY);
+#endif
 }
 
 void formatTimeLeft(time_t resetsAt, char* buf, size_t bufSize) {

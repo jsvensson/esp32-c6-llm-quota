@@ -21,4 +21,7 @@
 // quota changes. A new MQTT message wakes the device immediately.
 #define POWER_SAVE_AFTER_MINUTES 60
 
+// Set to 1 to show the WiFi and MQTT status dots, 0 to hide them.
+#define SHOW_CONNECTIVITY_DOTS 1
+
 #endif // CONFIG_H
