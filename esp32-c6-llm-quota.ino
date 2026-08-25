@@ -4,6 +4,7 @@
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
 #include <time.h>
+#include <esp_sntp.h>
 #include <esp32-hal-rgb-led.h>
 #include "config.h"
 
@@ -24,6 +25,9 @@
 #define TFT_BL_PIN   22
 #define STATUS_LED_PIN 8
 #define BOOT_BUTTON_PIN 9
+
+// NTP re-sync interval: 6 hours
+#define NTP_RESYNC_INTERVAL_MS (6UL * 60 * 60 * 1000)
 
 // 1. Define the Data Bus (SPI)
 // Arduino_HWSPI on ESP32 takes DC, CS, SCK, MOSI, MISO, SPIClass*, and shared flag.
@@ -309,9 +313,21 @@ void setupNTP() {
   Serial.print("[NTP] Configuring server: ");
   Serial.println(NTP_SERVER);
   configTime(0, 0, NTP_SERVER);
+  esp_sntp_set_sync_interval(NTP_RESYNC_INTERVAL_MS);
+  esp_sntp_set_time_sync_notification_cb(ntpSyncNotification);
+}
+
+void ntpSyncNotification(struct timeval *tv) {
+  timeSynced = true;
+  Serial.print("[NTP] Time synced: ");
+  Serial.println(tv->tv_sec);
+  if (!powerSaveActive) {
+    drawQuota();
+  }
 }
 
 void maintainNTP() {
+  // Fallback in case the sync notification callback is missed.
   if (timeSynced) {
     return;
   }
@@ -319,11 +335,6 @@ void maintainNTP() {
   time_t now = time(nullptr);
   if (now > 1000000000) {
     timeSynced = true;
-    Serial.print("[NTP] Time synced: ");
-    Serial.println(now);
-    if (!powerSaveActive) {
-      drawQuota();
-    }
   }
 }
 

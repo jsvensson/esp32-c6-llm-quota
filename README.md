@@ -67,9 +67,9 @@ each quota window maps to an object with `pct` (remaining quota, 0-100) and
 `resets_at` is optional. Windows without a `resets_at` value show no
 `Reset:` line.
 
-The ESP32 syncs its clock from `NTP_SERVER` and renders the time left until
-reset below each bar as `Reset: 1h 23m`. The countdown is hidden until the
-clock is synced.
+The ESP32 syncs its clock from `NTP_SERVER` and re-syncs every 6 hours to
+avoid RTC drift. Each successful sync is logged over Serial as `[NTP] Time
+synced: ...`. The reset countdown is hidden until the clock is synced.
 
 Publish the message with the retain flag set so the device receives the
 latest values immediately when it (re)connects:
