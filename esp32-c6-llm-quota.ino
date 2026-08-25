@@ -96,6 +96,7 @@ PubSubClient mqttClient(wifiClient);
 
 void setup() {
   Serial.begin(115200);
+  Serial.setTxTimeoutMs(0);
   Serial.println("Kimi quota display starting");
 
   // Initialize display early so we can show the WiFi connection screen
