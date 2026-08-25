@@ -96,6 +96,9 @@ PubSubClient mqttClient(wifiClient);
 
 void setup() {
   Serial.begin(115200);
+  // Make USB-CDC writes non-blocking. Without this, Serial.print() can stall
+  // for minutes when no serial monitor is attached, leaving the screen blank
+  // after the WiFi connection screen while it waits for a host to consume output.
   Serial.setTxTimeoutMs(0);
   Serial.println("Kimi quota display starting");
 
