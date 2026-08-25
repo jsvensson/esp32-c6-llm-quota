@@ -46,8 +46,8 @@ display. Quota data arrives over MQTT; WiFi is used to reach the broker.
 
    #define NTP_SERVER "pool.ntp.org"
 
-   # Turn off display/LED, 0 to disable.
-   # Display activates again on updated MQTT message.
+   // Turn off display/LED, 0 to disable.
+   // Display activates again on updated MQTT message.
    #define POWER_SAVE_AFTER_MINUTES 60
     ```
 
