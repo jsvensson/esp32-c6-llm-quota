@@ -536,11 +536,6 @@ void drawQuota() {
       }
     }
 
-    // Clear the old indicator area in the first window to avoid ghosting
-    // after moving the dots to the lower-right corner.
-    if (i == 0) {
-      gfx->fillRect(screenW - margin - 92, textY + 4, 28, 8, BG_COLOR);
-    }
   }
 
   // Draw the WiFi and MQTT status indicators in the lower-right corner.
