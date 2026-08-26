@@ -126,10 +126,14 @@ void setup() {
 }
 
 void loop() {
-  unsigned long now = millis();
-
   maintainNTP();
   maintainMQTT();
+
+  // Capture `now` after the maintain calls: mqttCallback() can set
+  // lastQuotaChangeMillis to a time later than a previously captured `now`,
+  // which would underflow the unsigned subtraction in the power-save check
+  // below and re-enter power-save immediately after a wake.
+  unsigned long now = millis();
 
   // Redraw every 5 s while awake. The reset countdown only has minute-level
   // granularity, and this is frequent enough for the status indicators and bar
@@ -147,7 +151,7 @@ void loop() {
   // Enter power-save after the configured idle timeout, but stay awake for at
   // least that long after the initial boot so the display is visible on startup.
   // A value of 0 disables power-save entirely. WiFi/MQTT/NTP keep running so a
-  // new quota message can wake the device in mqttCallback().
+  // quota change can wake the device in mqttCallback().
   unsigned long powerSaveTimeoutMs = (unsigned long)POWER_SAVE_AFTER_MINUTES * 60000UL;
   if (POWER_SAVE_AFTER_MINUTES > 0 && quotaDataReceived && !powerSaveActive &&
       (now - bootMillis >= powerSaveTimeoutMs) &&
@@ -413,6 +417,7 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 
   // Expected payload: {"5h": {"pct": 70, "resets_at": 1756340000}, ...}
   String log;
+  bool changed = false;
   for (int i = 0; i < WINDOW_COUNT; i++) {
     QuotaWindow &win = quotaWindows[i];
     if (!doc[win.label].is<JsonObject>()) {
@@ -433,6 +438,10 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     } else if (pct > 100) {
       pct = 100;
     }
+    if (pct != win.pctAvailable || hasReset != win.hasResetAt ||
+        resetTs != win.resetsAt) {
+      changed = true;
+    }
     win.pctAvailable = pct;
     win.hasResetAt = hasReset;
     win.resetsAt = resetTs;
@@ -448,13 +457,18 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
 
   if (log.length() > 0) {
     quotaDataReceived = true;
-    lastQuotaChangeMillis = millis();
     Serial.print("[MQTT] Quota updated: ");
     Serial.println(log);
-    if (powerSaveActive) {
-      exitPowerSave();
+    // Only a real change resets the idle timer and wakes the display.
+    // Unchanged messages (e.g. retained messages on reconnect) must not
+    // keep the device awake.
+    if (changed) {
+      lastQuotaChangeMillis = millis();
+      if (powerSaveActive) {
+        exitPowerSave();
+      }
+      drawQuota();
     }
-    drawQuota();
   } else {
     Serial.println("[MQTT] No known quota windows in payload, ignoring");
   }
