@@ -3,6 +3,8 @@
 Arduino sketch for the ESP32-C6 that shows quota usage bars on an ST7789
 display. Quota data arrives over MQTT; WiFi is used to reach the broker.
 
+This is built for and tested with the [Waveshare ESP32-C6-LCD-1.47](https://docs.waveshare.com/ESP32-C6-LCD-1.47?variant=ESP32-C6-LCD-1.47).
+
 ## Requirements
 
 - **ESP32 board core** (`esp32:esp32`) v3.x or newer — the sketch uses the
