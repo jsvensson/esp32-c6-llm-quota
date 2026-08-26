@@ -18,7 +18,8 @@
 #define NTP_SERVER "pool.ntp.org"
 
 // Power saving: turn off backlight and LED after this many minutes of no
-// quota changes. A new MQTT message wakes the device immediately.
+// quota changes. A message that changes the quota values wakes the device
+// immediately; messages with unchanged values do not.
 #define POWER_SAVE_AFTER_MINUTES 60
 
 // Set to 1 to show the WiFi and MQTT status dots, 0 to hide them.
